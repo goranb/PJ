@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-"""PJ Software"""
+"""PJ - Python VJ"""
 
 import gobject
 gobject.threads_init()
@@ -23,7 +23,7 @@ class PJ:
 
     __name__ = "PJ"
     __usage__ = "python pj.py -- starts the PJ"
-    __def_win_size__ = (960, 540)
+    __def_win_size__ = (1920, 1080)
 
     def destroy(self, widget, data=None):
         gtk.main_quit()
@@ -34,61 +34,47 @@ class PJ:
         except:
             return gst.element_factory_make("decodebin")
 
-    # def magic(self, pipeline, sink, args):
-    #     """This is where the magic happens"""
-    #     src = gst.element_factory_make("videotestsrc", "src")
-    #     pipeline.add(src)
-    #     src.link(sink)
+    def create_source(self, pipeline, sink, source):
 
-    def magic(self, pipeline, sink, args):
-
-        def onPad(obj, pad, target):
+        def on_pad(obj, pad, target):
             sinkpad = target.get_compatible_pad(pad, pad.get_caps())
             if sinkpad:
                 pad.link(sinkpad)
-            return True
+                return True
+            return False
 
-        assert len(sys.argv) == 3
-        assert os.path.exists(sys.argv[1])
-        assert os.path.exists(sys.argv[2])
+        src = gst.element_factory_make("filesrc")
+        src.set_property("location", source)
 
-        srcA = gst.element_factory_make("filesrc")
-        srcA.set_property("location", sys.argv[1])
+        #src_decode = self.create_decodebin()
+        src_decode = gst.element_factory_make("decodebin")
+        src_convert = gst.element_factory_make("ffmpegcolorspace")
+        src_alpha = gst.element_factory_make("alpha")
+        src_alpha.set_property("alpha", 0.5)
 
-        srcAdecode = self.create_decodebin()
-        srcAconvert = gst.element_factory_make("ffmpegcolorspace")
-        srcAalpha = gst.element_factory_make("alpha")
-        srcAalpha.set_property("alpha", 1.0)
+        pipeline.add(src, src_decode, src_convert, src_alpha)
+        src.link(src_decode)
+        src_decode.connect("pad-added", on_pad, src_convert)
+        src_convert.link(src_alpha)
+        src_alpha.link(sink)
 
-        srcB = gst.element_factory_make("filesrc")
-        srcB.set_property("location", sys.argv[2])
 
-        srcBdecode = self.create_decodebin()
-        srcBconvert = gst.element_factory_make("ffmpegcolorspace")
-        srcBalpha = gst.element_factory_make("alpha")
-        srcBalpha.set_property("alpha", 0.5)
+
+    def magic(self, pipeline, sink):
 
         mixer = gst.element_factory_make("videomixer")
         mixer.set_property("background", "black")
-
         pipeline.add(mixer)
 
-        pipeline.add(srcA, srcAdecode, srcAconvert, srcAalpha)
-        srcA.link(srcAdecode)
-        srcAdecode.connect("pad-added", onPad, srcAconvert)
-        srcAconvert.link(srcAalpha)
-        srcAalpha.link(mixer)
-
-        pipeline.add(srcB, srcBdecode, srcBconvert, srcBalpha)
-        srcB.link(srcBdecode)
-        srcBdecode.connect("pad-added", onPad, srcBconvert)
-        srcBconvert.link(srcBalpha)
-        srcBalpha.link(mixer)
+        self.create_source(pipeline, mixer, "videos/long_burning_car.mov")
+        self.create_source(pipeline, mixer, "videos/long_cb_richter_g.mov")
+        self.create_source(pipeline, mixer, "videos/noise_efektirano.mov")
+        self.create_source(pipeline, mixer, "videos/graph_zvezdice_gray.mov")
+        #self.create_source(pipeline, mixer, "videos/cory_noise.mov")
+        self.create_source(pipeline, mixer, "videos/noise_lichen.mov")
+        #self.create_source(pipeline, mixer, "videos/noise_vj_tunnel.mov")
 
         mixer.link(sink)
-
-        # remember the alpha elements
-        self.srcBalpha = srcBalpha
 
     def createPipeline(self, w):
         """Given a window, creates a pipeline and connects it to the window"""
@@ -186,9 +172,9 @@ class PJ:
     def run(self):
         w = self.createWindow()
         w.connect("destroy", self.destroy)
-        p, s = self.createPipeline(w)
+        pipeline, sink = self.createPipeline(w)
         try:
-            self.magic(p, s, sys.argv[1:])
+            self.magic(pipeline, sink)
             self.pipeline.set_state(gst.STATE_PLAYING)
             gtk.main()
         except PJException, e:
