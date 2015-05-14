@@ -1,10 +1,11 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 
-"""PJ - Python VJ"""
-
+"""Basic Framework for writing GStreamer Demos in Python"""
+#<excerpt 2>
 import gobject
 gobject.threads_init()
 import gst
+#</excerpt>
 import pygtk
 pygtk.require("2.0")
 import gtk
@@ -12,69 +13,38 @@ gtk.gdk.threads_init()
 import sys
 import os
 
-class PJException(Exception):
+
+class DemoException(Exception):
     """Base exception class for errors which occur during demos"""
 
     def __init__(self, reason):
         self.reason = reason
 
-class PJ:
-    """PJ main class"""
+class Demo:
+    """Base class implementing boring, boiler-plate code.
+    Sets up a basic gstreamer environment which includes:
 
-    __name__ = "PJ"
-    __usage__ = "python pj.py -- starts the PJ"
-    __def_win_size__ = (960, 540)
+    * a window containing a drawing area and basic media controls
+    * a basic gstreamer pipeline using an ximagesink
+    * connects the ximagesink to the window's drawing area
 
-    def destroy(self, widget, data=None):
-        gtk.main_quit()
+    Derived classes need only override magic(), __name__,
+    and __usage__ to create new demos."""
 
-    def create_decodebin(self):
-        try:
-            return gst.element_factory_make("decodebin2")
-        except:
-            return gst.element_factory_make("decodebin")
+    __name__ = "Basic Demo"
+    __usage__ = "python demo.py -- runs a simple test demo"
+    __def_win_size__ = (320, 240)
 
-    def create_source(self, pipeline, sink, source):
+    # this commment allows us to include only a portion of the file
+    # in the tutorial for this demo
+    # <excerpt 1>     ...
 
-        def on_pad(obj, pad, target):
-            sinkpad = target.get_compatible_pad(pad, pad.get_caps())
-            if sinkpad:
-                pad.link(sinkpad)
-                return True
-            return False
+    def magic(self, pipeline, sink, args):
+        """This is where the magic happens"""
+        src = gst.element_factory_make("videotestsrc", "src")
+        pipeline.add(src)
+        src.link(sink)
 
-        src = gst.element_factory_make("filesrc")
-        src.set_property("location", source)
-
-        #src_decode = self.create_decodebin()
-        src_decode = gst.element_factory_make("decodebin")
-        src_convert = gst.element_factory_make("ffmpegcolorspace")
-        src_alpha = gst.element_factory_make("alpha")
-        src_alpha.set_property("alpha", 0.5)
-
-        pipeline.add(src, src_decode, src_convert, src_alpha)
-        src.link(src_decode)
-        src_decode.connect("pad-added", on_pad, src_convert)
-        src_convert.link(src_alpha)
-        src_alpha.link(sink)
-
-
-
-    def magic(self, pipeline, sink):
-
-        mixer = gst.element_factory_make("videomixer")
-        mixer.set_property("background", "black")
-        pipeline.add(mixer)
-
-        self.create_source(pipeline, mixer, "videos/long_burning_car.mov")
-        self.create_source(pipeline, mixer, "videos/long_cb_richter_g.mov")
-        self.create_source(pipeline, mixer, "videos/noise_efektirano.mov")
-        self.create_source(pipeline, mixer, "videos/graph_zvezdice_gray.mov")
-        #self.create_source(pipeline, mixer, "videos/cory_noise.mov")
-        self.create_source(pipeline, mixer, "videos/noise_lichen.mov")
-        #self.create_source(pipeline, mixer, "videos/noise_vj_tunnel.mov")
-
-        mixer.link(sink)
 
     def createPipeline(self, w):
         """Given a window, creates a pipeline and connects it to the window"""
@@ -111,25 +81,26 @@ class PJ:
         cspace.link(scale)
         return (self.pipeline, cspace)
 
+    # ... end of excerpt </excerpt>
+
     # subclasses can override this method to provide custom controls
     def customWidgets(self):
         return gtk.HBox()
 
     def createWindow(self):
-        """Creates a top-level window"""
+        """Creates a top-level window, sets various boring attributes,
+        creates a place to put the video sink, adds some and finally
+        connects some basic signal handlers. Really, really boring.
+        """
 
         # create window, set basic attributes
-        w = gtk.Window(gtk.WINDOW_TOPLEVEL)
+        w = gtk.Window()
         w.set_size_request(*self.__def_win_size__)
-        w.set_decorated(False)
-        #w.fullscreen()
-        #w.unfullscreen()
-        w.set_title(self.__name__)
+        w.set_title("Gstreamer " + self.__name__)
         w.connect("destroy", gtk.main_quit)
 
         # declare buttons and their associated handlers
         controls = (
-            ("open_button", gtk.ToolButton(gtk.STOCK_OPEN), self.onPlay),
             ("play_button", gtk.ToolButton(gtk.STOCK_MEDIA_PLAY), self.onPlay),
             ("stop_button", gtk.ToolButton(gtk.STOCK_MEDIA_STOP), self.onStop),
             ("quit_button", gtk.ToolButton(gtk.STOCK_QUIT), gtk.main_quit)
@@ -175,46 +146,15 @@ class PJ:
 
     def run(self):
         w = self.createWindow()
-        w.connect("destroy", self.destroy)
-        pipeline, sink = self.createPipeline(w)
+        p, s = self.createPipeline(w)
         try:
-            self.magic(pipeline, sink)
-            self.pipeline.set_state(gst.STATE_PLAYING)
+            self.magic(p, s, sys.argv[1:])
             gtk.main()
-        except PJException, e:
+        except DemoException, e:
             print e.reason
             print self.__usage__
             sys.exit(-1)
 
 # if this file is being run directly, create the demo and run it
 if __name__ == '__main__':
-    PJ().run()
-
-
-
-#import gobject
-#import pygame
-#import time
-#import signal
-#import sys
-#import pygst
-
-# ability to quit
-# def signal_handler(signal, frame):
-#     print 'Received Signal: {}'.format(signal)
-#     print '...quitting...'
-#     pygame.quit()
-#     sys.exit(0)
-
-# signal.signal(signal.SIGTERM, signal_handler)
-# signal.signal(signal.SIGINT, signal_handler)
-
-# initiate graphic environment
-# pygame.init()
-# size = (pygame.display.Info().current_w, pygame.display.Info().current_h)
-# black = 0, 0, 0
-# screen = pygame.display.set_mode(size, pygame.FULLSCREEN & pygame.OPENGL)
-#pygame.mouse.set_visible(0)
-# initial logo
-
-# time.sleep(3)
+    Demo().run()
